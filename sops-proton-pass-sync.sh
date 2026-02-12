@@ -69,6 +69,7 @@ create_login_item() {
         echo "  + $title"
     else
         echo "  failed: $title" >&2
+        FAILED=1
     fi
 }
 
@@ -89,14 +90,17 @@ pass-cli vault create --name "$VAULT_NAME" >/dev/null
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
+FAILED=0
+
 echo "syncing $SECRET_COUNT secret(s)"
-printf '%s\n' "$SECRETS" | while IFS=$'\t' read -r key value_b64; do
+while IFS=$'\t' read -r key value_b64; do
     value=$(printf '%s' "$value_b64" | base64 -d)
     if is_ssh_key "$value"; then
         create_ssh_key_item "$key" "$value"
     else
         create_login_item "$key" "$value"
     fi
-done
+done < <(printf '%s\n' "$SECRETS")
 
 echo "done"
+[[ "$FAILED" -eq 0 ]]
