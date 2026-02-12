@@ -34,7 +34,7 @@ decrypt_and_flatten() {
     sops -d --output-type json "$1" | jq -r '
         path(.. | select(type == "string" or type == "number" or type == "boolean")) as $p
         | select($p[0] != "sops")
-        | ($p | map(tostring) | join("/")) + "\t" + (getpath($p) | tostring)
+        | ($p | map(tostring) | join("/")) + "\t" + (getpath($p) | tostring | @base64)
     '
 }
 
@@ -89,7 +89,8 @@ TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
 echo "syncing $SECRET_COUNT secret(s)"
-printf '%s\n' "$SECRETS" | while IFS=$'\t' read -r key value; do
+printf '%s\n' "$SECRETS" | while IFS=$'\t' read -r key value_b64; do
+    value=$(printf '%s' "$value_b64" | base64 -d)
     if is_ssh_key "$value"; then
         create_ssh_key_item "$key" "$value"
     else
