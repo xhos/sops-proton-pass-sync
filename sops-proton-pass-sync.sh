@@ -5,38 +5,17 @@ VAULT_NAME="sops-sync"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-  -v | --vault)
-    VAULT_NAME="$2"
-    shift 2
-    ;;
-  -h | --help)
-    echo "usage: $0 [-v vault] <sops-file>"
-    exit 0
-    ;;
-  -*)
-    echo "error: unknown option $1" >&2
-    exit 1
-    ;;
-  *)
-    SOPS_FILE="$1"
-    shift
-    ;;
+    -v|--vault) VAULT_NAME="$2"; shift 2 ;;
+    -h|--help)  echo "usage: $0 [-v vault] <sops-file>"; exit 0 ;;
+    -*)         echo "error: unknown option $1" >&2; exit 1 ;;
+    *)          SOPS_FILE="$1"; shift ;;
   esac
 done
 
-[[ -n "${SOPS_FILE:-}" ]] || {
-  echo "error: no sops file specified" >&2
-  exit 1
-}
-[[ -f "$SOPS_FILE" ]] || {
-  echo "error: $SOPS_FILE not found" >&2
-  exit 1
-}
+[[ -n "${SOPS_FILE:-}" ]] || { echo "error: no sops file specified" >&2; exit 1; }
+[[ -f "$SOPS_FILE" ]]     || { echo "error: $SOPS_FILE not found" >&2; exit 1; }
 
-require() { command -v "$1" >/dev/null 2>&1 || {
-  echo "error: $1 not found" >&2
-  exit 1
-}; }
+require() { command -v "$1" >/dev/null 2>&1 || { echo "error: $1 not found" >&2; exit 1; }; }
 require sops
 require pass-cli
 require jq
@@ -45,31 +24,37 @@ is_authenticated() {
   pass-cli test >/dev/null 2>&1 || pass-cli info >/dev/null 2>&1
 }
 
+# detect keys by their header
 is_ssh_key() {
   [[ "$1" == *"BEGIN OPENSSH PRIVATE KEY"* ]] ||
-    [[ "$1" == *"BEGIN RSA PRIVATE KEY"* ]] ||
-    [[ "$1" == *"BEGIN EC PRIVATE KEY"* ]]
+  [[ "$1" == *"BEGIN RSA PRIVATE KEY"* ]]     ||
+  [[ "$1" == *"BEGIN EC PRIVATE KEY"* ]]
 }
 
+# decrypt the sops file and flatten all nested keys into path/style/names
+# values are base64-encoded so multi-line secrets (keys, certs, etc) don't
+# break the line-by-line reading later
 decrypt_and_flatten() {
   sops -d --output-type json "$1" | jq -r '
-        path(.. | select(type == "string" or type == "number" or type == "boolean")) as $p
-        | select($p[0] != "sops")
-        | ($p | map(tostring) | join("/")) + "\t" + (getpath($p) | tostring | @base64)
-    '
+    path(.. | select(type == "string" or type == "number" or type == "boolean")) as $p
+    | select($p[0] != "sops")
+    | ($p | map(tostring) | join("/")) + "\t" + (getpath($p) | tostring | @base64)
+  '
 }
 
+# write the key to a temp file and import it as a native ssh-key item
+# falls back to a login item if the import fails for whatever reason
 create_ssh_key_item() {
   local title="$1" value="$2"
   local keyfile="$TMPDIR/$(printf '%s' "$title" | tr '/' '_')"
 
-  printf '%s\n' "$value" >"$keyfile"
+  printf '%s\n' "$value" > "$keyfile"
   chmod 600 "$keyfile"
 
   if pass-cli item create ssh-key import \
-    --from-private-key "$keyfile" \
-    --vault-name "$VAULT_NAME" \
-    --title "$title" >/dev/null 2>&1; then
+      --from-private-key "$keyfile" \
+      --vault-name "$VAULT_NAME" \
+      --title "$title" >/dev/null 2>&1; then
     echo "  + $title (ssh-key)"
   else
     echo "  ssh-key import failed for $title, storing as login" >&2
@@ -79,14 +64,17 @@ create_ssh_key_item() {
   shred -u "$keyfile" 2>/dev/null || rm -f "$keyfile"
 }
 
+# pass the value via json on stdin via --from-template
+# this avoids argument parsing issues with values starting with dashes,
+# or other weird characters
 create_login_item() {
   local title="$1" value="$2"
 
   if jq -n --arg title "$title" --arg password "$value" \
-    '{"title":$title,"password":$password}' |
-    pass-cli item create login \
-      --vault-name "$VAULT_NAME" \
-      --from-template - >/dev/null 2>&1; then
+      '{"title":$title,"password":$password}' |
+      pass-cli item create login \
+        --vault-name "$VAULT_NAME" \
+        --from-template - >/dev/null 2>&1; then
     echo "  + $title"
   else
     echo "  failed: $title" >&2
@@ -94,10 +82,7 @@ create_login_item() {
   fi
 }
 
-is_authenticated || {
-  echo "error: not authenticated (run: pass-cli login)" >&2
-  exit 1
-}
+is_authenticated || { echo "error: not authenticated (run: pass-cli login)" >&2; exit 1; }
 
 echo "decrypting $SOPS_FILE"
 SECRETS=$(decrypt_and_flatten "$SOPS_FILE")
@@ -106,7 +91,7 @@ SECRET_COUNT=$(printf '%s' "$SECRETS" | grep -c . || true)
 echo "found $SECRET_COUNT secret(s)"
 [[ "$SECRET_COUNT" -gt 0 ]] || exit 0
 
-# delete and recreate the vault
+# every run deletes the entire vault and recreates it
 echo "recreating vault: $VAULT_NAME"
 pass-cli vault delete --vault-name "$VAULT_NAME" >/dev/null 2>&1 || true
 pass-cli vault create --name "$VAULT_NAME" >/dev/null
@@ -127,4 +112,6 @@ while IFS=$'\t' read -r key value_b64; do
 done < <(printf '%s\n' "$SECRETS")
 
 echo "done"
+
+# exit 1 if any item failed, allows systemd OnFailure= to trigger notifications or similar
 [[ "$FAILED" -eq 0 ]]
