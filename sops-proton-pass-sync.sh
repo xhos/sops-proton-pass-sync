@@ -61,10 +61,11 @@ create_ssh_key_item() {
 create_login_item() {
     local title="$1" value="$2"
 
-    if pass-cli item create login \
-        --vault-name "$VAULT_NAME" \
-        --title "$title" \
-        --password "$value" >/dev/null 2>&1; then
+    if jq -n --arg title "$title" --arg password "$value" \
+        '{"title":$title,"password":$password}' | \
+        pass-cli item create login \
+            --vault-name "$VAULT_NAME" \
+            --from-template - >/dev/null 2>&1; then
         echo "  + $title"
     else
         echo "  failed: $title" >&2
