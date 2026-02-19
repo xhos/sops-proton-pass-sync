@@ -25,7 +25,7 @@ proton-pass-cli has a limitation of allowing you to create only ssh-key files an
 ## usage
 
 >[!IMPORTANT]
-> Make sure you read and understand the script before running it. The script will delete the target vault and recreate it, which will cause data loss if you point it at the wrong vault.
+> Make sure you read and understand the script before running it. The script will delete all items from a vault that are not in the sops file, which *will cause data loss* if you point it at a wrong one. It also is just not a good idea to run random scripts from the internet without understanding them.
 
 ```text
 sops-proton-pass-sync.sh [-v vault] <sops-file>
@@ -34,6 +34,8 @@ options:
   -v, --vault NAME    target vault name (default: "sops-sync")
   -h, --help          show usage
 ```
+
+If you happen to be on NixOS you can take a look at how I use this [script](https://github.com/xhos/nix/blob/45edea24bdbb2a87bcd262a1bb24f86b1a896fe4/modules/nixos/opt/_enrai/sops-sync.nix) in my config as a systemd timer.
 
 ## how it works
 
