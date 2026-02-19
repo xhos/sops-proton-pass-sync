@@ -25,7 +25,7 @@ proton-pass-cli has a limitation of allowing you to create only ssh-key files an
 ## usage
 
 >[!IMPORTANT]
-> Make sure you read and understand the script before running it. The script will delete all items from a vault that are not in the sops file, which *will cause data loss* if you point it at a wrong one. It also is just not a good idea to run random scripts from the internet without understanding them.
+> Make sure you read and understand the script before running it. The script will delete all items from a vault that are not in the sops file, which *will cause data loss* if you point it at the wrong one. It's also just not a good idea to run random scripts from the internet without understanding them.
 
 ```text
 sops-proton-pass-sync.sh [-v vault] <sops-file>
