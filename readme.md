@@ -51,7 +51,7 @@ On each run the script:
 - `pass-cli` only [supports](https://protonpass.github.io/pass-cli/commands/item/#create) creating `login` and `ssh-key` items via CLI as of now. All non-SSH secrets go into login items regardless of their content type.
 - Each item requires a separate `pass-cli` call. As a result, each secret takes 1-2 seconds to sync.
 
-# simpler version of the script
+## simpler version of the script
 
 Initially, I wrote a simpler version of the script, that deleted the vault completely and recreated it on each run. This doesn't leave any state of the run and is generally simpler, but has the downside of you seeing your sops secrets in proton pass ui as most recent items all the time, which is annoying.
 
